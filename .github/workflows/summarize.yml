@@ -7,10 +7,12 @@ on:
         description: 'Web URL to analyze'
         required: false
         type: string
+        default: ''
       file_url:
         description: 'File URL to analyze'
         required: false
         type: string
+        default: ''
       run_id:
         description: 'Port run ID'
         required: true
@@ -40,22 +42,26 @@ jobs:
         run: pip install -r summarizer/requirements.txt
 
       - name: Download file
-        if: github.event.inputs.file_url != ''
+        if: github.event.inputs.file_url != '' && github.event.inputs.file_url != 'null'
         run: |
-          echo "Downloading file..."
+          echo "Downloading file from: ${{ github.event.inputs.file_url }}"
           curl -L "${{ github.event.inputs.file_url }}" -o input_file
-          ls -l
+          ls -l input_file
+
+      - name: Debug inputs
+        run: |
+          echo "web_url input: '${{ github.event.inputs.web_url }}'"
+          echo "file_url input: '${{ github.event.inputs.file_url }}'"
+          echo "File exists: $(test -f input_file && echo 'yes' || echo 'no')"
 
       - name: Run script
         env:
-          WEB_URL: "${{ github.event.inputs.web_url }}"
+          WEB_URL: ${{ github.event.inputs.web_url }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          echo "Incoming web_url = ${{ github.event.inputs.web_url }}"
-          echo "ENV WEB_URL = $WEB_URL"
-          python summarizer/main.py
+        run: python summarizer/main.py
 
       - name: Send result to Port
+        if: success()
         run: |
           SUMMARY=$(jq -Rs . < summary.txt)
 
@@ -70,4 +76,4 @@ jobs:
           curl -X PATCH "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}" \
           -H "Authorization: Bearer ${{ secrets.PORT_API_KEY }}" \
           -H "Content-Type: application/json" \
-          -d '{"status":"FAILURE","message":"Workflow execution failed"}'
+          -d '{"status":"FAILURE","message":"Workflow execution failed. Check GitHub Actions logs for details."}'
