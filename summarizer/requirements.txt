@@ -6,3 +6,10 @@ PyPDF2
 python-docx
 langdetect
 deep-translator
+pdfplumber
+pytesseract
+pdf
+Pillow
+
+# Alternative robust PDF parser
+pypdf
