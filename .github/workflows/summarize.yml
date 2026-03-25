@@ -30,17 +30,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      # ✅ FIXED: Notify Port - START
-      - name: Notify Port - START
-        uses: port-labs/port-github-action@v1
-        with:
-          clientId: ${{ secrets.PORT_CLIENT_ID }}
-          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
-          baseUrl: https://api.getport.io
-          operation: PATCH_RUN
-          runId: ${{ github.event.inputs.run_id }}
-          status: "IN_PROGRESS"
-          logMessage: "🚀 Starting AI Document Insights analysis..."
+      # ✅ REMOVED: "Notify Port - START" step (Port does this automatically)
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -71,7 +61,7 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python summarizer/main.py
 
-      # ✅ NEW: Read the summary file
+      # ✅ Read the summary file
       - name: Read Summary File
         id: read_summary
         if: steps.run_script.outcome == 'success' && hashFiles('summary.txt') != ''
@@ -80,7 +70,7 @@ jobs:
           cat summary.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # ✅ FIXED: Update Port with final status and stream logs
+      # ✅ Update Port with final status and stream logs
       - name: Update Port with final status
         if: always()
         uses: port-labs/port-github-action@v1
@@ -97,3 +87,4 @@ jobs:
             📄 **Summary Generated:**
             
             {0}', steps.read_summary.outputs.content) || '❌ Analysis failed. Check GitHub Actions logs for details.' }}
+            
