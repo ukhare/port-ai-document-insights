@@ -47,7 +47,8 @@ jobs:
           WEB_URL: "${{ github.event.inputs.web_url }}"
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          echo "Input URL is: $WEB_URL"
+          echo "Incoming web_url = ${{ github.event.inputs.web_url }}"
+          echo "ENV WEB_URL = $WEB_URL"
           python summarizer/main.py
 
       - name: Send result to Port
