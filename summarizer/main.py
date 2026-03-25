@@ -77,8 +77,8 @@ def main():
     else:
         raise ValueError("No input provided. Please provide either a web_url or file_url.")
 
-    if not text or not text or not text.strip():
-        raise Exception("No content extracted from input")
+    if not text or len(text.strip()) < 50:
+        raise Exception(f"Insufficient content extracted from input. Got {len(text)} characters.")
 
     translated_text, lang = translate_if_needed(text)
 
