@@ -17,6 +17,10 @@ on:
         description: 'Port run ID'
         required: true
         type: string
+      port_context:
+        description: 'Port context (auto-injected)'
+        required: false
+        type: string
 
 jobs:
   run:
@@ -26,12 +30,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      # ✅ FIXED: Notify Port - START
       - name: Notify Port - START
-        run: |
-          curl -X PATCH "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}" \
-          -H "Authorization: Bearer ${{ secrets.PORT_API_KEY }}" \
-          -H "Content-Type: application/json" \
-          -d '{"status":"IN_PROGRESS"}'
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          baseUrl: https://api.getport.io
+          operation: PATCH_RUN
+          runId: ${{ github.event.inputs.run_id }}
+          status: "IN_PROGRESS"
+          logMessage: "🚀 Starting AI Document Insights analysis..."
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -62,20 +71,29 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python summarizer/main.py
 
+      # ✅ NEW: Read the summary file
+      - name: Read Summary File
+        id: read_summary
+        if: steps.run_script.outcome == 'success' && hashFiles('summary.txt') != ''
+        run: |
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          cat summary.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # ✅ FIXED: Update Port with final status and stream logs
       - name: Update Port with final status
         if: always()
-        run: |
-          if [ "${{ steps.run_script.outcome }}" == "success" ] && [ -f summary.txt ]; then
-            SUMMARY=$(jq -Rs . < summary.txt)
-            STATUS="SUCCESS"
-            PAYLOAD="{\"status\":\"$STATUS\",\"outputs\":{\"summary\":$SUMMARY}}"
-          else
-            STATUS="FAILURE"
-            MESSAGE="Workflow execution failed. Check GitHub Actions logs for details."
-            PAYLOAD="{\"status\":\"$STATUS\",\"message\":\"$MESSAGE\"}"
-          fi
-
-          curl -X PATCH "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}" \
-          -H "Authorization: Bearer ${{ secrets.PORT_API_KEY }}" \
-          -H "Content-Type: application/json" \
-          -d "$PAYLOAD"
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          baseUrl: https://api.getport.io
+          operation: PATCH_RUN
+          runId: ${{ github.event.inputs.run_id }}
+          status: ${{ steps.run_script.outcome == 'success' && 'SUCCESS' || 'FAILURE' }}
+          logMessage: |
+            ${{ steps.run_script.outcome == 'success' && format('✅ AI Document Insights - Analysis Complete
+            
+            📄 **Summary Generated:**
+            
+            {0}', steps.read_summary.outputs.content) || '❌ Analysis failed. Check GitHub Actions logs for details.' }}
