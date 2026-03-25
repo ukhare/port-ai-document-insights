@@ -58,6 +58,7 @@ jobs:
         env:
           WEB_URL: ${{ github.event.inputs.web_url }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python summarizer/main.py
 
       - name: Send result to Port
