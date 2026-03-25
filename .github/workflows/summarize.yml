@@ -30,14 +30,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      # ✅ REMOVED: "Notify Port - START" step (Port does this automatically)
+      - name: Log to Port - Starting
+        run: |
+          TOKEN=$(curl -s -X POST "https://api.getport.io/v1/auth/access_token" \
+            -H "Content-Type: application/json" \
+            -d "{\"clientId\":\"${{ secrets.PORT_CLIENT_ID }}\",\"clientSecret\":\"${{ secrets.PORT_CLIENT_SECRET }}\"}" \
+            | jq -r '.accessToken')
+          
+          curl -X POST "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}/logs" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"message":"🚀 Starting AI Document Insights analysis..."}'
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
-      - name: Install deps
+      - name: Log to Port - Installing Dependencies
+        run: |
+          TOKEN=$(curl -s -X POST "https://api.getport.io/v1/auth/access_token" \
+            -H "Content-Type: application/json" \
+            -d "{\"clientId\":\"${{ secrets.PORT_CLIENT_ID }}\",\"clientSecret\":\"${{ secrets.PORT_CLIENT_SECRET }}\"}" \
+            | jq -r '.accessToken')
+          
+          curl -X POST "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}/logs" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"message":"📦 Installing Python dependencies..."}'
+
+      - name: Install dependencies
         run: pip install -r summarizer/requirements.txt
 
       - name: Download file
@@ -53,7 +75,19 @@ jobs:
           echo "file_url input: '${{ github.event.inputs.file_url }}'"
           echo "File exists: $(test -f input_file && echo 'yes' || echo 'no')"
 
-      - name: Run script
+      - name: Log to Port - Running Analysis
+        run: |
+          TOKEN=$(curl -s -X POST "https://api.getport.io/v1/auth/access_token" \
+            -H "Content-Type: application/json" \
+            -d "{\"clientId\":\"${{ secrets.PORT_CLIENT_ID }}\",\"clientSecret\":\"${{ secrets.PORT_CLIENT_SECRET }}\"}" \
+            | jq -r '.accessToken')
+          
+          curl -X POST "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}/logs" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"message":"🤖 Running AI summarizer..."}'
+
+      - name: Run AI Summarizer
         id: run_script
         env:
           WEB_URL: ${{ github.event.inputs.web_url }}
@@ -61,7 +95,6 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python summarizer/main.py
 
-      # ✅ Read the summary file
       - name: Read Summary File
         id: read_summary
         if: steps.run_script.outcome == 'success' && hashFiles('summary.txt') != ''
@@ -70,8 +103,7 @@ jobs:
           cat summary.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # ✅ Update Port with final status and stream logs
-      - name: Update Port with final status
+      - name: Report Results to Port
         if: always()
         uses: port-labs/port-github-action@v1
         with:
