@@ -51,7 +51,7 @@ def main():
     # Check file first (file_url takes precedence)
     if os.path.exists(file_path):
         print("Processing file...")
-        # Detect file type by reading first bytes or use a default
+        # Detect file type by reading first bytes
         try:
             with open(file_path, 'rb') as f:
                 header = f.read(4)
@@ -77,6 +77,7 @@ def main():
     else:
         raise ValueError("No input provided. Please provide either a web_url or file_url.")
 
+    # ⬇️ THIS IS THE CHANGED LINE ⬇️
     if not text or len(text.strip()) < 50:
         raise Exception(f"Insufficient content extracted from input. Got {len(text)} characters.")
 
