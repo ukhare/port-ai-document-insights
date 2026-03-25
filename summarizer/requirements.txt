@@ -1,15 +1,18 @@
-openai
-groq
-requests
-beautifulsoup4
-PyPDF2
-python-docx
-langdetect
-deep-translator
-pdfplumber
-pytesseract
-pdf
-Pillow
+# AI/LLM APIs
+openai>=1.0.0
+groq>=0.4.0
 
-# Alternative robust PDF parser
-pypdf
+# Web scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# Language detection
+langdetect>=1.0.9
+
+# PDF parsing (multiple libraries for better compatibility)
+PyPDF2>=3.0.0
+pdfplumber>=0.10.0
+pypdf>=3.17.0
+
+# Required by pdfplumber
+Pillow>=10.0.0
