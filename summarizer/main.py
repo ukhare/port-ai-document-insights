@@ -26,7 +26,7 @@ Content:
 """
 
     res = client.chat.completions.create(
-        model="gpt-4.1-mini",
+        model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -34,7 +34,13 @@ Content:
 
 
 def main():
-    web_url = os.getenv("WEB_URL")
+    # Get and clean web_url
+    web_url = os.getenv("WEB_URL", "").strip()
+    
+    # Handle "null" string and empty values
+    if web_url in ("null", "None", ""):
+        web_url = None
+    
     file_path = "input_file"
 
     print("DEBUG → WEB_URL:", web_url)
@@ -42,17 +48,37 @@ def main():
     
     text = ""
 
-    if web_url:
-        text = extract_from_url(web_url)
-
-    elif os.path.exists(file_path):
-        if file_path.endswith(".pdf"):
+    # Check file first (file_url takes precedence)
+    if os.path.exists(file_path):
+        print("Processing file...")
+        # Detect file type by reading first bytes or use a default
+        try:
+            with open(file_path, 'rb') as f:
+                header = f.read(4)
+                if header[:4] == b'%PDF':
+                    print("Detected PDF file")
+                    text = extract_from_pdf(file_path)
+                elif header[:2] == b'PK':  # DOCX is a ZIP file
+                    print("Detected DOCX file")
+                    text = extract_from_docx(file_path)
+                else:
+                    # Try PDF as default
+                    print("Unknown format, trying PDF...")
+                    text = extract_from_pdf(file_path)
+        except Exception as e:
+            print(f"Error reading file: {e}")
+            # Fallback to PDF
             text = extract_from_pdf(file_path)
-        elif file_path.endswith(".docx"):
-            text = extract_from_docx(file_path)
+    
+    elif web_url:
+        print(f"Processing URL: {web_url}")
+        text = extract_from_url(web_url)
+    
+    else:
+        raise ValueError("No input provided. Please provide either a web_url or file_url.")
 
-    if not text:
-        raise Exception("No content found")
+    if not text or not text or not text.strip():
+        raise Exception("No content extracted from input")
 
     translated_text, lang = translate_if_needed(text)
 
