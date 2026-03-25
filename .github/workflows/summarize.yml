@@ -1,3 +1,6 @@
+name: AI error reporting:
+
+```yaml
 name: AI Document Insights
 
 on:
@@ -57,23 +60,56 @@ jobs:
           curl -X POST "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}/logs" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"message":"📦 Installing Python dependencies..."}'
+            -d '{"message":"📦 Installing Python dependencies (including PDF parsers)..."}'
 
       - name: Install dependencies
         run: pip install -r summarizer/requirements.txt
 
-      - name: Download file
+      - name: Download and verify file
         if: github.event.inputs.file_url != '' && github.event.inputs.file_url != 'null'
         run: |
-          echo "Downloading file from: ${{ github.event.inputs.file_url }}"
+          echo "📥 Downloading file from: ${{ github.event.inputs.file_url }}"
           curl -L "${{ github.event.inputs.file_url }}" -o input_file
-          ls -l input_file
+          
+          # Verify download
+          if [ ! -s input_file ]; then
+            echo "❌ Downloaded file is empty!"
+            exit 1
+          fi
+          
+          # Check file type and size
+          echo "📄 File information:"
+          file input_file
+          ls -lh input_file
+          
+          # If PDF, verify it's valid
+          if file input_file | grep -q "PDF"; then
+            echo "✅ Valid PDF file detected"
+            
+            # Log to Port
+            TOKEN=$(curl -s -X POST "https://api.getport.io/v1/auth/access_token" \
+              -H "Content-Type: application/json" \
+              -d "{\"clientId\":\"${{ secrets.PORT_CLIENT_ID }}\",\"clientSecret\":\"${{ secrets.PORT_CLIENT_SECRET }}\"}" \
+              | jq -r '.accessToken')
+            
+            FILE_SIZE=$(ls -lh input_file | awk '{print $5}')
+            curl -X POST "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}/logs" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"message\":\"📄 PDF file downloaded successfully (${FILE_SIZE})\"}"
+          fi
 
       - name: Debug inputs
         run: |
-          echo "web_url input: '${{ github.event.inputs.web_url }}'"
-          echo "file_url input: '${{ github.event.inputs.file_url }}'"
-          echo "File exists: $(test -f input_file && echo 'yes' || echo 'no')"
+          echo "🔍 Input validation:"
+          echo "  web_url: '${{ github.event.inputs.web_url }}'"
+          echo "  file_url: '${{ github.event.inputs.file_url }}'"
+          echo "  File exists: $(test -f input_file && echo 'YES ✅' || echo 'NO ❌')"
+          
+          if [ -f input_file ]; then
+            echo "  File type: $(file -b input_file)"
+            echo "  File size: $(du -h input_file | cut -f1)"
+          fi
 
       - name: Log to Port - Running Analysis
         run: |
@@ -82,10 +118,16 @@ jobs:
             -d "{\"clientId\":\"${{ secrets.PORT_CLIENT_ID }}\",\"clientSecret\":\"${{ secrets.PORT_CLIENT_SECRET }}\"}" \
             | jq -r '.accessToken')
           
+          if [ -f input_file ] && file input_file | grep -q "PDF"; then
+            MESSAGE="🤖 Running AI summarizer on PDF document..."
+          else
+            MESSAGE="🤖 Running AI summarizer on web content..."
+          fi
+          
           curl -X POST "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}/logs" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"message":"🤖 Running AI summarizer..."}'
+            -d "{\"message\":\"$MESSAGE\"}"
 
       - name: Run AI Summarizer
         id: run_script
@@ -95,9 +137,22 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python summarizer/main.py
 
+      - name: Verify summary generation
+        id: verify_summary
+        if: steps.run_script.outcome == 'success'
+        run: |
+          if [ -f summary.txt ]; then
+            SUMMARY_SIZE=$(wc -c < summary.txt)
+            echo "✅ Summary generated successfully (${SUMMARY_SIZE} bytes)"
+            echo "summary_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Warning: summary.txt not found"
+            echo "summary_exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Read Summary File
         id: read_summary
-        if: steps.run_script.outcome == 'success' && hashFiles('summary.txt') != ''
+        if: steps.run_script.outcome == 'success' && steps.verify_summary.outputs.summary_exists == 'true'
         run: |
           echo "content<<EOF" >> $GITHUB_OUTPUT
           cat summary.txt >> $GITHUB_OUTPUT
@@ -114,9 +169,9 @@ jobs:
           runId: ${{ github.event.inputs.run_id }}
           status: ${{ steps.run_script.outcome == 'success' && 'SUCCESS' || 'FAILURE' }}
           logMessage: |
-            ${{ steps.run_script.outcome == 'success' && format('✅ AI Document Insights - Analysis Complete
+            $ == 'success' && steps.verify_summary.outputs.summary_exists == 'true' && format('✅ AI Document Insights - Analysis Complete
             
             📄 **Summary Generated:**
             
-            {0}', steps.read_summary.outputs.content) || '❌ Analysis failed. Check GitHub Actions logs for details.' }}
+            {0}', steps.read_summary.outputs.content) || steps.run_script.outcome == 'success' && '⚠️ Analysis completed but summary file was not generated. Check the logs above.' || '❌ Analysis failed. Check the error details in the GitHub Actions logs above.' }}
             
