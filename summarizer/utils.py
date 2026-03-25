@@ -11,7 +11,7 @@ def extract_from_url(url):
     res = requests.get(url, timeout=10, headers=headers)
     res.raise_for_status()
     
-    soup = BeautifulSoupparser")
+    soup = BeautifulSoup(res.text, "html.parser")
     
     # Remove script and style elements
     for script in soup(["script", "style", "nav", "footer", "header"]):
