@@ -55,26 +55,27 @@ jobs:
           echo "File exists: $(test -f input_file && echo 'yes' || echo 'no')"
 
       - name: Run script
+        id: run_script
         env:
           WEB_URL: ${{ github.event.inputs.web_url }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python summarizer/main.py
 
-      - name: Send result to Port
-        if: success()
+      - name: Update Port with final status
+        if: always()
         run: |
-          SUMMARY=$(jq -Rs . < summary.txt)
+          if [ "${{ steps.run_script.outcome }}" == "success" ] && [ -f summary.txt ]; then
+            SUMMARY=$(jq -Rs . < summary.txt)
+            STATUS="SUCCESS"
+            PAYLOAD="{\"status\":\"$STATUS\",\"outputs\":{\"summary\":$SUMMARY}}"
+          else
+            STATUS="FAILURE"
+            MESSAGE="Workflow execution failed. Check GitHub Actions logs for details."
+            PAYLOAD="{\"status\":\"$STATUS\",\"message\":\"$MESSAGE\"}"
+          fi
 
           curl -X PATCH "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}" \
           -H "Authorization: Bearer ${{ secrets.PORT_API_KEY }}" \
           -H "Content-Type: application/json" \
-          -d "{\"status\":\"SUCCESS\",\"outputs\":{\"summary\":$SUMMARY}}"
-
-      - name: Notify Port - FAILURE
-        if: failure()
-        run: |
-          curl -X PATCH "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}" \
-          -H "Authorization: Bearer ${{ secrets.PORT_API_KEY }}" \
-          -H "Content-Type: application/json" \
-          -d '{"status":"FAILURE","message":"Workflow execution failed. Check GitHub Actions logs for details."}'
+          -d "$PAYLOAD"
