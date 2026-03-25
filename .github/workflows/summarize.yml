@@ -4,11 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       web_url:
+        description: 'Web URL to analyze'
         required: false
+        type: string
       file_url:
+        description: 'File URL to analyze'
         required: false
+        type: string
       run_id:
+        description: 'Port run ID'
         required: true
+        type: string
 
 jobs:
   run:
@@ -33,14 +39,12 @@ jobs:
       - name: Install deps
         run: pip install -r summarizer/requirements.txt
 
-      # 🔥 FIXED FILE DOWNLOAD
       - name: Download file
+        if: github.event.inputs.file_url != ''
         run: |
-          if [ ! -z "${{ github.event.inputs.file_url }}" ]; then
-            echo "Downloading file..."
-            curl -L "${{ github.event.inputs.file_url }}" -o input_file
-            ls -l
-          fi
+          echo "Downloading file..."
+          curl -L "${{ github.event.inputs.file_url }}" -o input_file
+          ls -l
 
       - name: Run script
         env:
@@ -59,3 +63,11 @@ jobs:
           -H "Authorization: Bearer ${{ secrets.PORT_API_KEY }}" \
           -H "Content-Type: application/json" \
           -d "{\"status\":\"SUCCESS\",\"outputs\":{\"summary\":$SUMMARY}}"
+
+      - name: Notify Port - FAILURE
+        if: failure()
+        run: |
+          curl -X PATCH "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}" \
+          -H "Authorization: Bearer ${{ secrets.PORT_API_KEY }}" \
+          -H "Content-Type: application/json" \
+          -d '{"status":"FAILURE","message":"Workflow execution failed"}'
