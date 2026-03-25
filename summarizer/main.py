@@ -52,7 +52,7 @@ Content:
         print("Attempting summarization using Groq fallback...")
 
         res = groq_client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",  # ✅ supported model
             messages=[{"role": "user", "content": prompt}]
         )
 
@@ -66,7 +66,6 @@ Content:
 
 
 def main():
-
     web_url = os.getenv("WEB_URL", "").strip()
 
     if web_url in ("null", "None", ""):
