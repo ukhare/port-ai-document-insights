@@ -27,8 +27,7 @@ def extract_text_from_pdf(file_path):
             for page_num, page in enumerate(pdf.pages, 1):
                 page_text = page.extract_text()
                 if page_text:
-                    text += page_text + "
-"
+                    text += page_text + "\n"
                     print(f"  ✓ Page {page_num}/{total_pages}: extracted {len(page_text)} chars")
                 else:
                     print(f"  ⚠ Page {page_num}/{total_pages}: no text extracted")
@@ -43,8 +42,7 @@ def extract_text_from_pdf(file_path):
     
     # Method 2: Fallback to PyPDF2
     try:
-        print("
-Attempting PDF extraction with PyPDF2...")
+        print("\nAttempting PDF extraction with PyPDF2...")
         text = ""
         with open(file_path, 'rb') as file:
             pdf_reader = PyPDF2.PdfReader(file)
@@ -54,8 +52,7 @@ Attempting PDF extraction with PyPDF2...")
             for page_num, page in enumerate(pdf_reader.pages, 1):
                 page_text = page.extract_text()
                 if page_text:
-                    text += page_text + "
-"
+                    text += page_text + "\n"
                     print(f"  ✓ Page {page_num}/{total_pages}: extracted {len(page_text)} chars")
                 else:
                     print(f"  ⚠ Page {page_num}/{total_pages}: no text extracted")
@@ -70,13 +67,11 @@ Attempting PDF extraction with PyPDF2...")
     
     # If both methods fail
     raise Exception(
-        f"PDF text extraction failed. Extracted only {len(text)} characters. "
+        f"PDF text extraction failed. Extracted only {len(text)} characters.\n"
         f"This PDF might be:\n"
         f"  • Image-based (scanned document requiring OCR)\n"
-        f"  • Encrypted or password-protected
-"
-        f"  • Corrupted or malformed
-"
+        f"  • Encrypted or password-protected\n"
+        f"  • Corrupted or malformed\n"
         f"  • Using unsupported encoding"
     )
 
@@ -96,8 +91,7 @@ def extract_text_from_url(url):
         for element in soup(["script", "style", "nav", "footer", "header", "aside"]):
             element.decompose()
         
-        text = soup.get_text(separator='
-', strip=True)
+        text = soup.get_text(separator='\n', strip=True)
         print(f"✓ Extracted {len(text)} characters from URL")
         return text
     except Exception as e:
@@ -119,8 +113,7 @@ def summarize_with_openai(text, api_key):
                 },
                 {
                     "role": "user",
-                    "content": f"Summarize the following content into 10 key business-friendly bullet points:\n
-{text[:4000]}"
+                    "content": f"Summarize the following content into 10 key business-friendly bullet points:\n{text[:4000]}"
                 }
             ],
             max_tokens=800,
@@ -150,9 +143,7 @@ def summarize_with_groq(text, api_key):
                 },
                 {
                     "role": "user",
-                    "content": f"Summarize the following content into 10 key business-friendly bullet points:
-
-{text[:4000]}"
+                    "content": f"Summarize the following content into 10 key business-friendly bullet points:\n{text[:4000]}"
                 }
             ],
             max_tokens=800,
@@ -175,10 +166,9 @@ def main():
     # Get inputs
     web_url = os.getenv("WEB_URL")
     openai_api_key = os.getenv("OPENAI_API_KEY")
-    groq_api_GROQ_API_KEY")
+    groq_api_key = os.getenv("GROQ_API_KEY")
     
-    print(f"
-📋 Configuration:")
+    print("\n📋 Configuration:")
     print(f"  WEB_URL: {web_url if web_url else 'Not provided'}")
     print(f"  File exists: {os.path.exists('input_file')}")
     print(f"  OpenAI API: {'✓ Configured' if openai_api_key else '✗ Not configured'}")
@@ -226,15 +216,13 @@ def main():
     # Detect language
     try:
         lang = detect(text[:1000])
-        print(f"
-🌍 Detected language: {lang}")
+        print(f"\n🌍 Detected language: {lang}")
     except Exception as e:
         print(f"⚠ Language detection failed: {e}")
         lang = "en"
     
     # Summarize
-    print(f"
-🤖 Starting summarization...")
+    print(f"\n🤖 Starting summarization...")
     summary = None
     
     if openai_api_key:
@@ -272,24 +260,19 @@ Output: English
     with open("summary.txt", "w", encoding="utf-8") as f:
         f.write(output)
     
-    print("
-" + "="*60)
+    print("\n" + "="*60)
     print("✅ SUMMARY GENERATED SUCCESSFULLY")
     print("="*60)
     print(output)
     print("="*60)
-    print(f"
-💾 Summary saved to: summary.txt")
+    print(f"\n💾 Summary saved to: summary.txt")
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"
-{'='*60}")
+        print("\n" + "="*60)
         print(f"❌ ERROR: {e}")
-        print(f"{'='*60}
-")
+        print("="*60)
         sys.exit(1)
-            
