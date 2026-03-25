@@ -1,0 +1,59 @@
+name: AI Document Insights
+
+on:
+  workflow_dispatch:
+    inputs:
+      web_url:
+        required: false
+      file_url:
+        required: false
+      run_id:
+        required: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Notify Port - START
+        run: |
+          curl -X PATCH "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}" \
+          -H "Authorization: Bearer ${{ secrets.PORT_API_KEY }}" \
+          -H "Content-Type: application/json" \
+          -d '{"status":"IN_PROGRESS"}'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install deps
+        run: pip install -r summarizer/requirements.txt
+
+      # 🔥 FIXED FILE DOWNLOAD
+      - name: Download file
+        run: |
+          if [ ! -z "${{ github.event.inputs.file_url }}" ]; then
+            echo "Downloading file..."
+            curl -L "${{ github.event.inputs.file_url }}" -o input_file
+            ls -l
+          fi
+
+      - name: Run script
+        env:
+          WEB_URL: ${{ github.event.inputs.web_url }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python summarizer/main.py
+
+      - name: Send result to Port
+        run: |
+          SUMMARY=$(jq -Rs . < summary.txt)
+
+          curl -X PATCH "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}" \
+          -H "Authorization: Bearer ${{ secrets.PORT_API_KEY }}" \
+          -H "Content-Type: application/json" \
+          -d "{\"status\":\"SUCCESS\",\"outputs\":{\"summary\":$SUMMARY}}"
