@@ -37,6 +37,9 @@ def main():
     web_url = os.getenv("WEB_URL")
     file_path = "input_file"
 
+    print("DEBUG → WEB_URL:", web_url)
+    print("DEBUG → FILE EXISTS:", os.path.exists(file_path))
+    
     text = ""
 
     if web_url:
