@@ -132,7 +132,35 @@ jobs:
           WEB_URL: ${{ github.event.inputs.web_url }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: python summarizer/main.py
+        run: |
+          # Run the script and capture output
+          python summarizer/main.py 2>&1 | tee script_output.log
+          
+          # Store exit code
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      - name: Stream Python Script Logs to Port
+        if: always()
+        run: |
+          TOKEN=$(curl -s -X POST "https://api.getport.io/v1/auth/access_token" \
+            -H "Content-Type: application/json" \
+            -d "{\"clientId\":\"${{ secrets.PORT_CLIENT_ID }}\",\"clientSecret\":\"${{ secrets.PORT_CLIENT_SECRET }}\"}" \
+            | jq -r '.accessToken')
+          
+          # Send script output logs if they exist
+          if [ -f script_output.log ]; then
+            # Read log file and escape for JSON
+            LOG_CONTENT=$(cat script_output.log | jq -Rs .)
+            
+            curl -X POST "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}/logs" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"message\":\"📋 **Python Script Output:**
+
+              \`\`\`
+               ${LOG_CONTENT}
+               \`\`\`\"}"
+          fi
 
       - name: Verify summary generation
         id: verify_summary
@@ -142,9 +170,31 @@ jobs:
             SUMMARY_SIZE=$(wc -c < summary.txt)
             echo "✅ Summary generated successfully (${SUMMARY_SIZE} bytes)"
             echo "summary_exists=true" >> $GITHUB_OUTPUT
+            
+            # Log to Port
+            TOKEN=$(curl -s -X POST "https://api.getport.io/v1/auth/access_token" \
+              -H "Content-Type: application/json" \
+              -d "{\"clientId\":\"${{ secrets.PORT_CLIENT_ID }}\",\"clientSecret\":\"${{ secrets.PORT_CLIENT_SECRET }}\"}" \
+              | jq -r '.accessToken')
+            
+            curl -X POST "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}/logs" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"message\":\"✅ Summary file generated (${SUMMARY_SIZE} bytes)\"}"
           else
             echo "⚠️ Warning: summary.txt not found"
             echo "summary_exists=false" >> $GITHUB_OUTPUT
+            
+            # Log to Port
+            TOKEN=$(curl -s -X POST "https://api.getport.io/v1/auth/access_token" \
+              -H "Content-Type: application/json" \
+              -d "{\"clientId\":\"${{ secrets.PORT_CLIENT_ID }}\",\"clientSecret\":\"${{ secrets.PORT_CLIENT_SECRET }}\"}" \
+              | jq -r '.accessToken')
+            
+            curl -X POST "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}/logs" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"message":"⚠️ Warning: summary.txt file not found"}'
           fi
 
       - name: Read Summary File
@@ -155,8 +205,10 @@ jobs:
           cat summary.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Report Results to Port
-        if: always()
+      # ===== IMPROVED REPORTING SECTION =====
+      
+      - name: Report Success to Port
+        if: steps.run_script.outcome == 'success' && steps.verify_summary.outputs.summary_exists == 'true'
         uses: port-labs/port-github-action@v1
         with:
           clientId: ${{ secrets.PORT_CLIENT_ID }}
@@ -164,11 +216,49 @@ jobs:
           baseUrl: https://api.getport.io
           operation: PATCH_RUN
           runId: ${{ github.event.inputs.run_id }}
-          status: ${{ steps.run_script.outcome == 'success' && 'SUCCESS' || 'FAILURE' }}
+          status: SUCCESS
           logMessage: |
-            $ == 'success' && steps.verify_summary.outputs.summary_exists == 'true' && format('✅ AI Document Insights - Analysis Complete
+            ✅ **AI Document Insights - Analysis Complete**
             
             📄 **Summary Generated:**
             
-            {0}', steps.read_summary.outputs.content) || steps.run_script.outcome == 'success' && '⚠️ Analysis completed but summary file was not generated. Check the logs above.' || '❌ Analysis failed. Check the error details in the GitHub Actions logs above.' }}
+            ${{ steps.read_summary.outputs.content }}
+
+      - name: Report Warning to Port
+        if: steps.run_script.outcome == 'success' && steps.verify_summary.outputs.summary_exists != 'true'
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          baseUrl: https://api.getport.io
+          operation: PATCH_RUN
+          runId: ${{ github.event.inputs.run_id }}
+          status: SUCCESS
+          logMessage: |
+            ⚠️ **Analysis completed but summary file was not generated**
+            
+            The Python script ran successfully but did not create a summary.txt file.
+            Please check the script output logs above for details.
+
+      - name: Report Failure to Port
+        if: steps.run_script.outcome != 'success'
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          baseUrl: https://api.getport.io
+          operation: PATCH_RUN
+          runId: ${{ github.event.inputs.run_id }}
+          status: FAILURE
+          logMessage: |
+            ❌ **Analysis Failed**
+            
+            The AI summarizer script encountered an error.
+            Please check the Python script output logs above for error details.
+            
+            Common issues:
+            - Invalid or inaccessible URL
+            - PDF parsing errors
+            - API key issues (OpenAI/Groq)
+            - Network connectivity problems
             
