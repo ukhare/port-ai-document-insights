@@ -25,6 +25,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -63,6 +64,7 @@ jobs:
         run: pip install -r summarizer/requirements.txt
 
       - name: Download and verify file
+        continue-on-error: false
         if: github.event.inputs.file_url != '' && github.event.inputs.file_url != 'null'
         run: |
           echo "📥 Downloading file from: ${{ github.event.inputs.file_url }}"
@@ -261,4 +263,15 @@ jobs:
             - PDF parsing errors
             - API key issues (OpenAI/Groq)
             - Network connectivity problems
+
+      - name: Report failure step to Port
+        if: failure()
+        uses: port-labs/port-github-action@v1
+        with:
+          clientId: ${{ secrets.PORT_CLIENT_ID }}
+          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
+          operation: PATCH_RUN
+          runId: ${{ fromJson(inputs.port_context).runId }}
+          status: "FAILURE"
+          logMessage: "Workflow failed at step: ${{ github.job }}"
             
