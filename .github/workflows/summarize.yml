@@ -131,8 +131,6 @@ jobs:
           else
             MESSAGE="🤖 Running AI summarizer on web content..."
           fi
-           content..."
-          fi
           
           curl -X POST "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}/logs" \
             -H "Authorization: Bearer $TOKEN" \
