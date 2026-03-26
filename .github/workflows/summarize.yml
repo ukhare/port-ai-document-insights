@@ -1,5 +1,3 @@
-name: AI Document Insights
-
 on:
   workflow_dispatch:
     inputs:
@@ -64,15 +62,22 @@ jobs:
         run: pip install -r summarizer/requirements.txt
 
       - name: Download and verify file
-        continue-on-error: false
+        id: download_file
         if: github.event.inputs.file_url != '' && github.event.inputs.file_url != 'null'
         run: |
           echo "📥 Downloading file from: ${{ github.event.inputs.file_url }}"
-          curl -L "${{ github.event.inputs.file_url }}" -o input_file
+          
+          # Download with better error handling
+          if ! curl -L -f --max-time 300 "${{ github.event.inputs.file_url }}" -o input_file; then
+            echo "❌ Failed to download file from URL"
+            echo "download_failed=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
           
           # Verify download
           if [ ! -s input_file ]; then
             echo "❌ Downloaded file is empty!"
+            echo "download_failed=true" >> $GITHUB_OUTPUT
             exit 1
           fi
           
@@ -97,8 +102,11 @@ jobs:
               -H "Content-Type: application/json" \
               -d "{\"message\":\"📄 PDF file downloaded successfully (${FILE_SIZE})\"}"
           fi
+          
+          echo "download_failed=false" >> $GITHUB_OUTPUT
 
       - name: Debug inputs
+        if: always()
         run: |
           echo "🔍 Input validation:"
           echo "  web_url: '${{ github.event.inputs.web_url }}'"
@@ -111,6 +119,7 @@ jobs:
           fi
 
       - name: Log to Port - Running Analysis
+        if: steps.download_file.outcome == 'success' || steps.download_file.outcome == 'skipped'
         run: |
           TOKEN=$(curl -s -X POST "https://api.getport.io/v1/auth/access_token" \
             -H "Content-Type: application/json" \
@@ -122,6 +131,8 @@ jobs:
           else
             MESSAGE="🤖 Running AI summarizer on web content..."
           fi
+           content..."
+          fi
           
           curl -X POST "https://api.getport.io/v1/actions/runs/${{ github.event.inputs.run_id }}/logs" \
             -H "Authorization: Bearer $TOKEN" \
@@ -130,6 +141,7 @@ jobs:
 
       - name: Run AI Summarizer
         id: run_script
+        if: steps.download_file.outcome == 'success' || steps.download_file.outcome == 'skipped'
         env:
           WEB_URL: ${{ github.event.inputs.web_url }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -158,10 +170,9 @@ jobs:
               -H "Authorization: Bearer $TOKEN" \
               -H "Content-Type: application/json" \
               -d "{\"message\":\"📋 **Python Script Output:**
-
               \`\`\`
-               ${LOG_CONTENT}
-               \`\`\`\"}"
+              ${LOG_CONTENT}
+              \`\`\`\"}"
           fi
 
       - name: Verify summary generation
@@ -210,7 +221,7 @@ jobs:
       # ===== IMPROVED REPORTING SECTION =====
       
       - name: Report Success to Port
-        if: steps.run_script.outcome == 'success' && steps.verify_summary.outputs.summary_exists == 'true'
+        if: success() && steps.verify_summary.outputs.summary_exists == 'true'
         uses: port-labs/port-github-action@v1
         with:
           clientId: ${{ secrets.PORT_CLIENT_ID }}
@@ -227,7 +238,7 @@ jobs:
             ${{ steps.read_summary.outputs.content }}
 
       - name: Report Warning to Port
-        if: steps.run_script.outcome == 'success' && steps.verify_summary.outputs.summary_exists != 'true'
+        if: success() && steps.verify_summary.outputs.summary_exists != 'true'
         uses: port-labs/port-github-action@v1
         with:
           clientId: ${{ secrets.PORT_CLIENT_ID }}
@@ -242,8 +253,9 @@ jobs:
             The Python script ran successfully but did not create a summary.txt file.
             Please check the script output logs above for details.
 
-      - name: Report Failure to Port
-        if: steps.run_script.outcome != 'success'
+      # ===== CATCH-ALL FAILURE HANDLER (MUST BE LAST) =====
+      - name: Report Any Failure to Port
+        if: failure()
         uses: port-labs/port-github-action@v1
         with:
           clientId: ${{ secrets.PORT_CLIENT_ID }}
@@ -253,25 +265,22 @@ jobs:
           runId: ${{ github.event.inputs.run_id }}
           status: FAILURE
           logMessage: |
-            ❌ **Analysis Failed**
+            ❌ **Workflow Failed**
             
-            The AI summarizer script encountered an error.
-            Please check the Python script output logs above for error details.
+            **Failed Step:** ${{ github.job }}
             
-            Common issues:
-            - Invalid or inaccessible URL
-            - PDF parsing errors
-            - API key issues (OpenAI/Groq)
-            - Network connectivity problems
-
-      - name: Report failure step to Port
-        if: failure()
-        uses: port-labs/port-github-action@v1
-        with:
-          clientId: ${{ secrets.PORT_CLIENT_ID }}
-          clientSecret: ${{ secrets.PORT_CLIENT_SECRET }}
-          operation: PATCH_RUN
-          runId: ${{ fromJson(inputs.port_context).runId }}
-          status: "FAILURE"
-          logMessage: "Workflow failed at step: ${{ github.job }}"
+            **Possible Issues:**
+            - ❌ File download failed (check URL accessibility and file size)
+            - ❌ PDF parsing errors (corrupted or invalid PDF)
+            - ❌ Python script execution error
+            - ❌ API key issues (OpenAI/Groq)
+            - ❌ Network connectivity problems
+            - ❌ Dependency installation failure
             
+            **Troubleshooting:**
+            1. Check the GitHub Actions logs for detailed error messages
+            2. Verify the file URL is accessible and returns a valid file
+            3. Ensure API keys are correctly configured in secrets
+            4. Check if the file format is supported
+            
+            **GitHub Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
